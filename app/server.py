@@ -1,3 +1,4 @@
+
 import aiohttp
 import asyncio
 import uvicorn
@@ -8,29 +9,25 @@ from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.staticfiles import StaticFiles
+from starlette_jwt import JWTAuthenticationBackend
+from starlette.middleware.authentication import AuthenticationMiddleware
+from starlette.authentication import requires
 
-export_file_url = 'https://www.dropbox.com/s/6bgq8t6yextloqp/export.pkl?raw=1'
-export_file_name = 'export.pkl'
+# export_file_url = 'https://www.dropbox.com/s/6bgq8t6yextloqp/export.pkl?raw=1'
+export_file_name = 'trained_model.pkl'
 
-classes = ['black', 'grizzly', 'teddys']
+classes = ['drawings',  'hentai',  'neutral',  'porn',  'sexy']
 path = Path(__file__).parent
 
 app = Starlette()
-app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_headers=['X-Requested-With', 'Content-Type'])
+app.add_middleware(
+    AuthenticationMiddleware,
+    backend=JWTAuthenticationBackend(secret_key='my-secret-20200202', prefix='m1', username_field='sub'))
+app.add_middleware(
+    CORSMiddleware, allow_origins=['*'], allow_headers=['X-Requested-With', 'Content-Type'])
 app.mount('/static', StaticFiles(directory='app/static'))
 
-
-async def download_file(url, dest):
-    if dest.exists(): return
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            data = await response.read()
-            with open(dest, 'wb') as f:
-                f.write(data)
-
-
 async def setup_learner():
-    await download_file(export_file_url, path / export_file_name)
     try:
         learn = load_learner(path, export_file_name)
         return learn
@@ -49,13 +46,14 @@ learn = loop.run_until_complete(asyncio.gather(*tasks))[0]
 loop.close()
 
 
-@app.route('/')
-async def homepage(request):
-    html_file = path / 'view' / 'index.html'
-    return HTMLResponse(html_file.open().read())
+# @app.route('/')
+# async def homepage(request):
+#     html_file = path / 'view' / 'index.html'
+#     return HTMLResponse(html_file.open().read())
 
 
 @app.route('/analyze', methods=['POST'])
+@requires('authenticated')
 async def analyze(request):
     img_data = await request.form()
     img_bytes = await (img_data['file'].read())
@@ -66,4 +64,4 @@ async def analyze(request):
 
 if __name__ == '__main__':
     if 'serve' in sys.argv:
-        uvicorn.run(app=app, host='0.0.0.0', port=5000, log_level="info")
+        uvicorn.run(app=app, host='127.0.0.1', port=5000, log_level="info")
